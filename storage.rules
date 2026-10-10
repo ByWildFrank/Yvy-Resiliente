@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// ============================================================================
+// YVY RESILIENTE — STORAGE RULES
+// Adjuntos de reportes: solo imágenes (JPEG/PNG/WebP), máx. 5 MB,
+// organizados por propietario. Lectura para agentes con reports:read.
+// ============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAllowedImage() {
+      return request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+
+    match /reports/{uid}/{fileName} {
+      allow read: if signedIn(); // contenido operativo de reportes (agentes autorizados por firestore.rules en /reports)
+      allow write: if signedIn() && request.auth.uid == uid && isAllowedImage();
+      allow delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

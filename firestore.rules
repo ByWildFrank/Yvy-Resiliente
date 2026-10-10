@@ -1,0 +1,125 @@
+rules_version = '2';
+
+// ============================================================================
+// YVY RESILIENTE — FIRESTORE SECURITY RULES (PRODUCCIÓN & ESCALABILIDAD)
+// Validación de esquemas, tipos y geolocalizaciones para alto rendimiento.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helpers de validación geométrica y datos ──────────────────────────
+
+    function isValidLocation(loc) {
+      return loc is map
+        && 'lat' in loc && loc.lat is number && loc.lat >= -90.0 && loc.lat <= 90.0
+        && 'lng' in loc && loc.lng is number && loc.lng >= -180.0 && loc.lng <= 180.0;
+    }
+
+    // ─── users ─────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if true;
+      allow create, update: if request.resource.data.email is string
+        && request.resource.data.displayName is string
+        && request.resource.data.role in ['ciudadano', 'agente', 'admin'];
+      allow delete: if false;
+    }
+
+    // ─── organizations ─────────────────────────────────────────────────────
+    match /organizations/{id} {
+      allow read: if true;
+      allow write: if request.resource.data.name is string
+        && request.resource.data.type is string;
+      allow delete: if false;
+    }
+
+    // ─── incidents ─────────────────────────────────────────────────────────
+    match /incidents/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.code is string
+        && request.resource.data.type in ['incendio', 'humo', 'inundacion', 'anegamiento', 'otro']
+        && request.resource.data.status in ['deteccion', 'reportado', 'en_verificacion', 'confirmado', 'en_gestion', 'controlado', 'cerrado', 'descartado']
+        && request.resource.data.priority in ['baja', 'media', 'alta', 'critica']
+        && isValidLocation(request.resource.data.location);
+      allow delete: if false;
+    }
+
+    // ─── reports (puntos de notificación ciudadana) ────────────────────────
+    match /reports/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.code is string
+        && request.resource.data.type in ['incendio', 'humo', 'inundacion', 'anegamiento', 'camino_bloqueado', 'otro']
+        && request.resource.data.status in ['recibido', 'en_verificacion', 'confirmado', 'descartado', 'cerrado']
+        && isValidLocation(request.resource.data.location);
+      allow delete: if false;
+    }
+
+    // ─── alerts ────────────────────────────────────────────────────────────
+    match /alerts/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.code is string
+        && request.resource.data.type in ['incendio', 'hidrica', 'meteorologica', 'general']
+        && request.resource.data.severity in ['info', 'aviso', 'alerta', 'emergencia']
+        && request.resource.data.title is string;
+      allow delete: if false;
+    }
+
+    // ─── sensors ───────────────────────────────────────────────────────────
+    match /sensors/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.code is string
+        && request.resource.data.name is string
+        && isValidLocation(request.resource.data.location);
+      allow delete: if false;
+    }
+
+    // ─── stations (estaciones hidrométricas) ────────────────────────────────
+    match /stations/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.code is string
+        && request.resource.data.name is string
+        && request.resource.data.currentLevelM is number;
+      allow delete: if false;
+    }
+
+    // ─── sources (fuentes de datos oficiales) ──────────────────────────────
+    match /sources/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.code is string
+        && request.resource.data.name is string;
+      allow delete: if false;
+    }
+
+    // ─── audit_logs ────────────────────────────────────────────────────────
+    match /audit_logs/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.action is string
+        && request.resource.data.details is string;
+      allow update, delete: if false;
+    }
+
+    // ─── scenario_runs ─────────────────────────────────────────────────────
+    match /scenario_runs/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.mode in ['incendio', 'hidrologico'];
+      allow update, delete: if false;
+    }
+
+    // ─── settings ──────────────────────────────────────────────────────────
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ─── Catálogos ─────────────────────────────────────────────────────────
+    match /incident_categories/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /alert_categories/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

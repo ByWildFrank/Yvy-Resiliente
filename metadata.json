@@ -1,0 +1,6 @@
+{
+  "name": "Yvy Resiliente OPS",
+  "description": "Centro de Inteligencia Territorial y Consola Táctica GIS/C4ISR para monitoreo de incendios e inundaciones en Corrientes y Chaco.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
