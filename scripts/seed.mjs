@@ -1,21 +1,71 @@
+/**
+ * ============================================================================
+ * YVY RESILIENTE — SEED DE PRODUCCIÓN (Firestore)
+ * ============================================================================
+ * ⚠️ ESTE ARCHIVO ESTÁ EN .gitignore: NUNCA versionar credenciales.
+ *
+ * EJECUCIÓN (Node ≥ 20.6, desde la raíz del proyecto):
+ *
+ *   1) Desplegar las reglas de SIEMBRA (permisivas, temporales):
+ *        firebase deploy --only firestore:rules
+ *      (firebase.json apunta a firestore.rules — para sembrar, apuntá
+ *       temporalmente a firestore.seed.rules o desplegá con:
+ *        firebase deploy --only firestore:rules --config firebase.json
+ *       tras cambiar "rules" a "firestore.seed.rules" en firebase.json,
+ *       o de forma equivalente usá la consola de Firebase para pegar
+ *       el contenido de firestore.seed.rules y publicarlo).
+ *
+ *   2) Ejecutar el seed con las variables de entorno:
+ *        node --env-file=.env scripts/seed.mjs
+ *
+ *   3) ⚠️ INMEDIATAMENTE después, redesplegar las reglas ESTRICTAS:
+ *        firebase deploy --only firestore:rules
+ *      (restaurar "rules": "firestore.rules" en firebase.json si lo cambiaste).
+ *
+ * AUTENTICACIÓN: se inicia sesión con una cuenta de siembra (SEED_EMAIL /
+ * SEED_PASSWORD) creada en Firebase Auth. Sus credenciales viven SOLO en .env.
+ *
+ * HONESTIDAD DE DATOS: las fuentes sin adaptador implementado se siembran
+ * como "pendiente" (Nunca "conectada") y las estaciones como carga "manual",
+ * según docs/INTEGRATIONS.md y docs/DATA_MODEL.md.
+ * ============================================================================
+ */
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+
+// ─── Configuración desde .env (misma fuente que la app) ─────────────────────
+
+function required(name) {
+  const value = process.env[name];
+  if (!value) {
+    console.error(`[seed] Falta la variable de entorno ${name}. Configurá .env (ver .env.example).`);
+    process.exit(1);
+  }
+  return value;
+}
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAR5mYjXdeSh_zLovCmmllhN8YZ0DSV5uY",
-  authDomain: "yvy-resiliente.firebaseapp.com",
-  projectId: "yvy-resiliente",
-  storageBucket: "yvy-resiliente.firebasestorage.app",
-  messagingSenderId: "575158535238",
-  appId: "1:575158535238:web:8176bdef39e3640713b647"
+  apiKey: required('VITE_FIREBASE_API_KEY'),
+  authDomain: required('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: required('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: required('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: required('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: required('VITE_FIREBASE_APP_ID'),
 };
 
+const SEED_EMAIL = required('SEED_EMAIL');
+const SEED_PASSWORD = required('SEED_PASSWORD');
+
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 
 const now = new Date().toISOString();
 const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
 const daysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString();
+
+// ─── Organismos ─────────────────────────────────────────────────────────────
 
 const organizations = [
   { id: 'org-bomberos-ctes', name: 'Bomberos Voluntarios de Corrientes', type: 'bomberos', territory: 'Corrientes Capital', contact: 'cuartel@bomberosctes.gob.ar', active: true, createdAt: daysAgo(400), updatedAt: daysAgo(30) },
@@ -23,6 +73,8 @@ const organizations = [
   { id: 'org-apa-chaco', name: 'Administración Provincial del Agua (Chaco)', type: 'hidrica', territory: 'Provincia del Chaco', contact: 'hidrica@apa.chaco.gob.ar', active: true, createdAt: daysAgo(400), updatedAt: daysAgo(60) },
   { id: 'org-muni-resistencia', name: 'Municipalidad de Resistencia', type: 'municipalidad', territory: 'Resistencia, Chaco', contact: 'gestion@resistencia.gob.ar', active: true, createdAt: daysAgo(400), updatedAt: daysAgo(15) },
 ];
+
+// ─── Usuarios (perfiles de documento; credenciales de Auth se gestionan aparte) ──
 
 const AGENT_BASE_PERMS = [
   'incidents:read', 'incidents:create', 'incidents:verify',
@@ -66,6 +118,8 @@ const users = [
   {
     uid: 'u-admin', email: 'admin@demo.yvy', displayName: 'Administradora Técnica',
     role: 'admin', organizationId: null, specialties: [],
+    // Admin técnico: SIN permisos institucionales (alerts:publish / incidents:verify),
+    // según docs/PERMISSIONS_MATRIX.md.
     permissions: [
       'users:read', 'users:manage', 'orgs:read', 'orgs:manage',
       'sources:read', 'sources:manage', 'sensors:read', 'sensors:manage',
@@ -75,66 +129,61 @@ const users = [
   },
 ];
 
+// ─── Estaciones hidrométricas ────────────────────────────────────────────────
+// HONESTIDAD: sin adaptador oficial conectado → sourceType 'manual'.
+// sourceRef apunta al sensor propio que releva la estación, cuando existe.
+
 const stations = [
   {
     id: 'st-01', code: 'H-01', name: 'Puerto Corrientes', river: 'Río Paraná', province: 'Corrientes',
     currentLevelM: 4.82, alertLevelM: 6.50, evacLevelM: 7.00, trendCmPerHour: 2,
     location: { lat: -27.4667, lng: -58.8333, label: 'Puerto de Corrientes Capital' },
-    sourceType: 'adaptador', sourceRef: 'INA-PAR-01', updatedAt: minutesAgo(25), active: true,
+    sourceType: 'manual', sourceRef: 'sen-002', updatedAt: minutesAgo(25), active: true,
   },
   {
     id: 'st-02', code: 'H-02', name: 'Puerto Barranqueras', river: 'Río Paraná / Riacho Barranqueras', province: 'Chaco',
     currentLevelM: 5.15, alertLevelM: 6.00, evacLevelM: 6.50, trendCmPerHour: 3,
     location: { lat: -27.4833, lng: -58.9333, label: 'Puerto Barranqueras, Chaco' },
-    sourceType: 'adaptador', sourceRef: 'APA-BARR-01', updatedAt: minutesAgo(30), active: true,
+    sourceType: 'manual', sourceRef: null, updatedAt: minutesAgo(30), active: true,
   },
   {
     id: 'st-03', code: 'H-03', name: 'Paso de la Patria', river: 'Río Paraná', province: 'Corrientes',
     currentLevelM: 5.70, alertLevelM: 6.50, evacLevelM: 7.00, trendCmPerHour: 4,
     location: { lat: -27.3167, lng: -58.5833, label: 'Costanera Paso de la Patria' },
-    sourceType: 'adaptador', sourceRef: 'INA-PASO-01', updatedAt: minutesAgo(15), active: true,
+    sourceType: 'manual', sourceRef: 'sen-001', updatedAt: minutesAgo(15), active: true,
   },
   {
     id: 'st-04', code: 'H-04', name: 'Ituzaingó', river: 'Río Paraná (aguas abajo de Yacyretá)', province: 'Corrientes',
     currentLevelM: 2.90, alertLevelM: 3.50, evacLevelM: 4.00, trendCmPerHour: -1,
     location: { lat: -27.5833, lng: -56.6833, label: 'Puerto Ituzaingó' },
-    sourceType: 'adaptador', sourceRef: 'EBY-ITU-01', updatedAt: minutesAgo(40), active: true,
+    sourceType: 'manual', sourceRef: null, updatedAt: minutesAgo(40), active: true,
   },
   {
     id: 'st-05', code: 'H-05', name: 'Puerto Bermejo', river: 'Río Paraguay', province: 'Chaco',
     currentLevelM: 4.20, alertLevelM: 5.50, evacLevelM: 6.00, trendCmPerHour: 1,
     location: { lat: -26.9333, lng: -58.5000, label: 'Puerto Bermejo, Chaco' },
-    sourceType: 'adaptador', sourceRef: 'APA-BER-01', updatedAt: minutesAgo(50), active: true,
+    sourceType: 'manual', sourceRef: null, updatedAt: minutesAgo(50), active: true,
   },
   {
     id: 'st-06', code: 'H-06', name: 'Goya', river: 'Río Paraná', province: 'Corrientes',
     currentLevelM: 4.60, alertLevelM: 5.20, evacLevelM: 5.70, trendCmPerHour: 2,
     location: { lat: -29.1333, lng: -59.2667, label: 'Puerto Goya, Corrientes' },
-    sourceType: 'adaptador', sourceRef: 'INA-GOY-01', updatedAt: minutesAgo(35), active: true,
+    sourceType: 'manual', sourceRef: null, updatedAt: minutesAgo(35), active: true,
   },
 ];
 
+// ─── Fuentes de información ─────────────────────────────────────────────────
+// HONESTIDAD: una fuente solo se marca 'conectada' si tiene adaptador
+// implementado y sincronizando (docs/INTEGRATIONS.md). FIRMS/SMN/INA aún no
+// lo tienen → 'pendiente', sin lastSyncAt, con las variables que requerirán.
+
 const sources = [
   {
-    id: 'src-firms', code: 'NASA-FIRMS', name: 'NASA FIRMS (VIIRS / MODIS)', provider: 'NASA Earthdata',
-    type: 'satelital', status: 'conectada', coverage: 'Global / Región NEA',
-    variables: ['Anomalías térmicas', 'FRP (Fire Radiative Power)', 'Confianza de detección'],
-    units: 'MW, %', lastSyncAt: minutesAgo(12), notes: 'Detección satelital de anomalías térmicas en esteros y pastizales.',
-    requiresEnv: ['FIRMS_MAP_KEY'], createdAt: daysAgo(365), updatedAt: minutesAgo(12),
-  },
-  {
-    id: 'src-smn', code: 'SMN-RED', name: 'Servicio Meteorológico Nacional', provider: 'SMN Argentina',
-    type: 'meteorologica', status: 'conectada', coverage: 'Provincias de Corrientes y Chaco',
-    variables: ['Temperatura', 'Humedad relativa', 'Viento (velocidad y dirección)', 'Precipitación acumulada'],
-    units: '°C, %, km/h, mm', lastSyncAt: minutesAgo(20), notes: 'Estaciones meteorológicas oficiales de Corrientes y Resistencia.',
-    requiresEnv: ['SMN_API_KEY'], createdAt: daysAgo(365), updatedAt: minutesAgo(20),
-  },
-  {
-    id: 'src-ina', code: 'INA-SINA', name: 'Instituto Nacional del Agua (INA)', provider: 'INA',
-    type: 'hidrologica', status: 'conectada', coverage: 'Cuenca del Plata / Ríos Paraná y Paraguay',
-    variables: ['Niveles hidrométricos', 'Caudales', 'Previsiones hidrológicas semanales'],
-    units: 'm, m³/s', lastSyncAt: minutesAgo(30), notes: 'Alertas y cotas hidrométricas de referencia.',
-    requiresEnv: ['INA_API_URL'], createdAt: daysAgo(365), updatedAt: minutesAgo(30),
+    id: 'src-int-incid', code: 'SRC-INT-01', name: 'Registro interno de incidentes', provider: 'Yvy (propio)',
+    type: 'oficial', status: 'conectada', coverage: 'Corrientes y Chaco',
+    variables: ['incidentes', 'reportes', 'alertas'], units: null,
+    lastSyncAt: now, notes: 'Almacén propio de la plataforma.',
+    requiresEnv: [], createdAt: daysAgo(365), updatedAt: now,
   },
   {
     id: 'src-yvy-iot', code: 'YVY-TELEMETRIA', name: 'Red de Sensores Territoriales Yvy', provider: 'APA Chaco / Defensa Civil Corrientes',
@@ -143,7 +192,36 @@ const sources = [
     units: 'm, mm, %', lastSyncAt: minutesAgo(2), notes: 'Nodos IoT LoRaWAN y LTE-M con telemetría cada 15 min.',
     requiresEnv: [], createdAt: daysAgo(200), updatedAt: minutesAgo(2),
   },
+  {
+    id: 'src-firms', code: 'NASA-FIRMS', name: 'NASA FIRMS (VIIRS / MODIS)',
+    provider: 'NASA Earthdata (pendiente de convenio)',
+    type: 'satelital', status: 'pendiente', coverage: 'Global / Región NEA',
+    variables: ['Anomalías térmicas', 'FRP (Fire Radiative Power)', 'Confianza de detección'],
+    units: 'MW, %', lastSyncAt: null,
+    notes: 'Adaptador no implementado. Requiere definir mecanismo de acceso (API MAP_KEY) y condiciones de uso.',
+    requiresEnv: ['VITE_FIRMS_MAP_KEY'], createdAt: daysAgo(365), updatedAt: daysAgo(100),
+  },
+  {
+    id: 'src-smn', code: 'SMN-RED', name: 'Servicio Meteorológico Nacional',
+    provider: 'SMN Argentina (pendiente)',
+    type: 'meteorologica', status: 'pendiente', coverage: 'Provincias de Corrientes y Chaco',
+    variables: ['Temperatura', 'Humedad relativa', 'Viento (velocidad y dirección)', 'Precipitación acumulada'],
+    units: '°C, %, km/h, mm', lastSyncAt: null,
+    notes: 'Adaptador no implementado. Requiere credenciales y validación de disponibilidad del servicio.',
+    requiresEnv: ['VITE_SMN_API_URL', 'VITE_SMN_API_KEY'], createdAt: daysAgo(365), updatedAt: daysAgo(100),
+  },
+  {
+    id: 'src-ina', code: 'INA-SINA', name: 'Instituto Nacional del Agua (INA)',
+    provider: 'INA (pendiente)',
+    type: 'hidrologica', status: 'pendiente', coverage: 'Cuenca del Plata / Ríos Paraná y Paraguay',
+    variables: ['Niveles hidrométricos', 'Caudales', 'Previsiones hidrológicas semanales'],
+    units: 'm, m³/s', lastSyncAt: null,
+    notes: 'Adaptador no implementado. Hasta conectarlo, las estaciones se actualizan por carga manual.',
+    requiresEnv: ['VITE_HYDRO_API_URL'], createdAt: daysAgo(365), updatedAt: daysAgo(100),
+  },
 ];
+
+// ─── Sensores IoT ────────────────────────────────────────────────────────────
 
 const sensors = [
   {
@@ -178,6 +256,8 @@ const sensors = [
   },
 ];
 
+// ─── Incidentes ──────────────────────────────────────────────────────────────
+
 const incidents = [
   {
     id: 'inc-001', code: 'INC-2026-014', type: 'incendio', status: 'confirmado', priority: 'critica',
@@ -211,12 +291,12 @@ const incidents = [
     id: 'inc-003', code: 'INC-2026-009', type: 'inundacion', status: 'en_gestion', priority: 'alta',
     description: 'Crecida del río Paraná con afectación de zonas ribereñas frente a Paso de la Patria. Ganado costero reubicado de forma preventiva.',
     location: { lat: -27.3167, lng: -58.6167, label: 'Paso de la Patria, Corrientes' },
-    sourceType: 'sensor', sourceRef: 'H-01', areaHa: null, levelM: 5.7,
+    sourceType: 'sensor', sourceRef: 'H-03', areaHa: null, levelM: 5.7,
     organizationId: 'org-defensa-civil', assignedTo: 'u-coordinador', createdBy: 'u-hidrica',
     createdAt: minutesAgo(600), observedAt: minutesAgo(600), updatedAt: minutesAgo(90),
     publicViewable: true,
     history: [
-      { at: minutesAgo(600), actorId: 'u-hidrica', actorName: 'Ing. Pérez', from: null, to: 'reportado', note: 'Umbral de alerta superado en estación H-01' },
+      { at: minutesAgo(600), actorId: 'u-hidrica', actorName: 'Ing. Pérez', from: null, to: 'reportado', note: 'Umbral de alerta superado en estación H-03' },
       { at: minutesAgo(500), actorId: 'u-coordinador', actorName: 'Coordinadora Ojeda', from: 'reportado', to: 'confirmado', note: 'Confirmado por relevamiento costero' },
       { at: minutesAgo(90), actorId: 'u-coordinador', actorName: 'Coordinadora Ojeda', from: 'confirmado', to: 'en_gestion', note: 'Coordinación de reubicación de ganado' },
     ],
@@ -248,6 +328,8 @@ const incidents = [
     ],
   },
 ];
+
+// ─── Reportes ciudadanos ─────────────────────────────────────────────────────
 
 const reports = [
   {
@@ -307,6 +389,8 @@ const reports = [
   },
 ];
 
+// ─── Alertas ─────────────────────────────────────────────────────────────────
+
 const alerts = [
   {
     id: 'al-001', code: 'AL-2026-003', type: 'incendio', severity: 'alerta',
@@ -330,9 +414,32 @@ const alerts = [
   },
 ];
 
+// ─── Auditoría inicial ───────────────────────────────────────────────────────
+
+const auditEntries = [
+  {
+    id: 'aud-seed-001',
+    at: now,
+    actorId: 'seed',
+    actorName: 'Siembra inicial de plataforma',
+    action: 'admin.seeded',
+    targetType: 'database',
+    targetId: 'initial-dataset',
+    details: 'Carga inicial de organismos, usuarios, estaciones, fuentes, sensores, incidentes, reportes y alertas. Dataset operativo inicial.',
+    visibility: 'admin',
+  },
+];
+
+// ─── Ejecución ───────────────────────────────────────────────────────────────
+
 async function seed() {
-  console.log('--- Iniciando siembra en base de datos Firestore de producción ---');
-  
+  console.warn('⚠️  Recordatorio: este script requiere firestore.seed.rules desplegado.');
+  console.warn('⚠️  Al terminar, redesplegá las reglas estrictas: firebase deploy --only firestore:rules\n');
+
+  console.log(`Autenticando cuenta de siembra (${SEED_EMAIL})…`);
+  await signInWithEmailAndPassword(auth, SEED_EMAIL, SEED_PASSWORD);
+  console.log('✓ Sesión de siembra iniciada');
+
   for (const org of organizations) {
     await setDoc(doc(db, 'organizations', org.id), org);
   }
@@ -351,7 +458,7 @@ async function seed() {
   for (const src of sources) {
     await setDoc(doc(db, 'sources', src.id), src);
   }
-  console.log(`✓ Fuentes de datos insertadas: ${sources.length}`);
+  console.log(`✓ Fuentes insertadas: ${sources.length} (integradas: ${sources.filter((s) => s.status === 'conectada').length} · pendientes: ${sources.filter((s) => s.status === 'pendiente').length})`);
 
   for (const sen of sensors) {
     await setDoc(doc(db, 'sensors', sen.id), sen);
@@ -366,12 +473,17 @@ async function seed() {
   for (const rep of reports) {
     await setDoc(doc(db, 'reports', rep.id), rep);
   }
-  console.log(`✓ Puntos de notificación ciudadana insertados: ${reports.length}`);
+  console.log(`✓ Reportes ciudadanos insertados: ${reports.length}`);
 
   for (const al of alerts) {
     await setDoc(doc(db, 'alerts', al.id), al);
   }
   console.log(`✓ Alertas insertadas: ${alerts.length}`);
+
+  for (const entry of auditEntries) {
+    await setDoc(doc(db, 'audit_logs', entry.id), entry);
+  }
+  console.log(`✓ Auditoría inicial insertada: ${auditEntries.length}`);
 
   await setDoc(doc(db, 'settings', 'general'), {
     appName: 'Yvy Resiliente',
@@ -383,11 +495,14 @@ async function seed() {
   });
   console.log('✓ Configuración general inicializada');
 
-  console.log('=== Base de datos Firestore sembrada con éxito ===');
+  console.log('\n=== Firestore sembrado con éxito ===');
+  console.log('⚠️  PROXIMO PASO OBLIGATORIO: redesplegar las reglas estrictas:');
+  console.log('      firebase deploy --only firestore:rules\n');
   process.exit(0);
 }
 
-seed().catch(err => {
+seed().catch((err) => {
   console.error('Error al sembrar Firestore:', err);
+  console.error('\nSi recibiste "permission-denied": verificá que firestore.seed.rules esté desplegado.');
   process.exit(1);
 });

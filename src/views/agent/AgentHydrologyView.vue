@@ -9,13 +9,28 @@ import { LABELS, formatTimeAgo } from '@/config/labels';
 import StateMessage from '@/components/ui/StateMessage.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import ModalDialog from '@/components/ui/ModalDialog.vue';
+import { syncInaSource } from '@/services/externalSources.service';
 import type { StationReadout } from '@/services/monitoring.service';
 
 const stationsQuery = useAsyncData<StationReadout[]>(() => listStations(), { isEmpty: (d) => d.length === 0 });
 const canManage = can('sensors:manage');
+const syncingIna = ref(false);
 
 const stateTone = (s: string): 'critical' | 'warning' | 'info' =>
   s === 'evacuacion' || s === 'alerta' ? 'critical' : s === 'aviso' ? 'warning' : 'info';
+
+async function handleSyncIna(): Promise<void> {
+  syncingIna.value = true;
+  try {
+    const res = await syncInaSource();
+    pushToast('success', 'Sincronización INA / Prefectura', `${res.ports.length} estaciones actualizadas con cotas y tendencias oficiales.`);
+    await stationsQuery.reload();
+  } catch (err: any) {
+    pushToast('error', 'Error en sincronización hidrológica', err.message);
+  } finally {
+    syncingIna.value = false;
+  }
+}
 
 // Modal de carga manual
 const editing = ref<StationReadout | null>(null);
@@ -60,12 +75,29 @@ const alertsCount = computed(() =>
           <h1 class="text-base font-bold text-[#dbe3f4] uppercase tracking-tight">Hidrología</h1>
           <StatusBadge v-if="alertsCount > 0" :label="`${alertsCount} en alerta`" tone="critical" />
         </div>
-        <p class="text-xs text-[#bcc9cd] mt-1 max-w-3xl">
-          Estaciones hidrométricas de referencia con umbrales. Hasta integrar el adaptador oficial
-          (fuente "Red hidrométrica oficial", pendiente), las lecturas se actualizan por carga manual auditada.
+        <p class="text-xs text-[#bcc9cd] mt-1 max-w-2xl">
+          Monitoreo de estaciones hidrométricas de la Cuenca del Plata con cotas oficiales de alerta y evacuación
+          conectadas con el Instituto Nacional del Agua (INA) y Prefectura Naval Argentina.
         </p>
       </div>
-      <StatusBadge label="Fuente: carga manual" tone="warning" />
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          :disabled="syncingIna"
+          class="flex items-center gap-1.5 bg-[#06b6d4] hover:bg-[#4cd7f6] disabled:opacity-50 text-[#00424f] font-bold text-xs font-mono px-3 py-1.5 rounded-lg transition-colors shadow-lg"
+          @click="handleSyncIna"
+        >
+          <span class="material-symbols-outlined text-[15px]" :class="{ 'animate-spin': syncingIna }">
+            {{ syncingIna ? 'refresh' : 'sync' }}
+          </span>
+          <span>{{ syncingIna ? 'Sincronizando...' : 'Sincronizar INA / Prefectura' }}</span>
+        </button>
+        <StatusBadge
+          :label="stationsQuery.state.value.status === 'ok' && stationsQuery.state.value.data.some(s => s.sourceType === 'adaptador') ? 'Fuente: INA / Prefectura' : 'Fuente: carga manual'"
+          :tone="stationsQuery.state.value.status === 'ok' && stationsQuery.state.value.data.some(s => s.sourceType === 'adaptador') ? 'success' : 'warning'"
+        />
+      </div>
     </div>
 
     <StateMessage :state="stationsQuery.state.value" @retry="stationsQuery.reload()">

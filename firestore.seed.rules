@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// ============================================================================
+// YVY RESILIENTE — REGLAS DE SIEMBRA (TEMPORALES)
+//
+// ⚠️⚠️⚠️ SOLO PARA EJECUTAR scripts/seed.mjs CONTRA UNA BASE VACÍA ⚠️⚠️⚠️
+//
+// Este archivo relaja las reglas estrictas para permitir la carga inicial de
+// datos operativos (incidentes con historial, alertas publicadas, reportes con
+// timeline) que firestore.rules bloquea estructuralmente por diseño.
+//
+// PROCEDIMIENTO OBLIGATORIO (ver docs/INTEGRATIONS.md §5):
+//   1. firebase deploy --only firestore:rules   ← ¡desplegá ESTE archivo primero!
+//   2. node --env-file=.env scripts/seed.mjs
+//   3. firebase deploy --only firestore:rules   ← ¡READESPLEGÁ firestore.rules INMEDIATAMENTE!
+//
+// NUNCA dejar este ruleset desplegado más tiempo del estrictamente necesario.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Lectura pública de lo que el producto define como público;
+    // escrita de siembra para cualquier usuario autenticado.
+    match /{document=**} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+  }
+}

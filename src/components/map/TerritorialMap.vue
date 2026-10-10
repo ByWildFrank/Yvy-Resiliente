@@ -77,11 +77,26 @@ const showReports = ref(true);
 const showStations = ref(true);
 const showSensors = ref(props.mode === 'tecnico');
 
+type PopupState =
+  | { type: 'incident'; data: Incident }
+  | { type: 'report'; data: CitizenReport }
+  | { type: 'station'; data: HydroStation & { state?: string } }
+  | { type: 'sensor'; data: Sensor };
+
 // Estado del popup reactivo
-const activePopup = ref<{
-  type: 'incident' | 'report' | 'station' | 'sensor';
-  data: any;
-} | null>(null);
+const activePopup = ref<PopupState | null>(null);
+
+function getIncidentTypeLabel(type: string): string {
+  return (LABELS.incidentType as Record<string, string>)[type] ?? type;
+}
+
+function getReportTypeLabel(type: string): string {
+  return (LABELS.reportType as Record<string, string>)[type] ?? type;
+}
+
+function getReportStatusLabel(status: string): string {
+  return (LABELS.reportStatus as Record<string, string>)[status] ?? status;
+}
 
 const tileUrls = {
   satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -514,7 +529,7 @@ watch(
             {{ activePopup.data.priority }}
           </span>
         </div>
-        <div class="font-bold text-[#dbe3f4]">{{ LABELS.incidentType[activePopup.data.type] ?? activePopup.data.type }}</div>
+        <div class="font-bold text-[#dbe3f4]">{{ getIncidentTypeLabel(activePopup.data.type) }}</div>
         <p class="text-[#bcc9cd] line-clamp-3 leading-relaxed">{{ activePopup.data.description }}</p>
         <div class="text-[10px] text-[#869397] font-mono space-y-0.5 pt-1 border-t border-[#3d494c]/20">
           <div>📍 {{ activePopup.data.location.label ?? `${activePopup.data.location.lat.toFixed(4)}, ${activePopup.data.location.lng.toFixed(4)}` }}</div>
@@ -529,10 +544,10 @@ watch(
         <div class="flex items-center justify-between gap-2 border-b border-[#3d494c]/40 pb-1">
           <span class="font-mono font-bold text-[#ffb77d]">{{ activePopup.data.code }}</span>
           <span class="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono bg-[#232a37] text-[#ffdcc3]">
-            {{ LABELS.reportStatus[activePopup.data.status] ?? activePopup.data.status }}
+            {{ getReportStatusLabel(activePopup.data.status) }}
           </span>
         </div>
-        <div class="font-bold text-[#dbe3f4]">Reporte ciudadano · {{ LABELS.reportType[activePopup.data.type] ?? activePopup.data.type }}</div>
+        <div class="font-bold text-[#dbe3f4]">Reporte ciudadano · {{ getReportTypeLabel(activePopup.data.type) }}</div>
         <p class="text-[#bcc9cd] line-clamp-3 leading-relaxed">{{ activePopup.data.description }}</p>
         <div class="text-[10px] text-[#869397] font-mono space-y-0.5 pt-1 border-t border-[#3d494c]/20">
           <div>📍 {{ activePopup.data.location.label ?? `${activePopup.data.location.lat.toFixed(4)}, ${activePopup.data.location.lng.toFixed(4)}` }}</div>
@@ -618,17 +633,8 @@ watch(
       </button>
     </div>
 
-    <!-- Indicador de modo selector (posicionado de forma no obstructiva centrado y debajo de los controles) -->
-    <div
-      v-if="pickerMode"
-      class="absolute top-14 left-1/2 -translate-x-1/2 z-10 pointer-events-none max-w-[calc(100%-1rem)] bg-[#070e1a]/95 backdrop-blur-md border border-[#4cd7f6]/60 rounded-full px-3.5 py-1 text-xs text-[#4cd7f6] font-mono flex items-center justify-center gap-2 shadow-2xl"
-    >
-      <span class="material-symbols-outlined text-[15px] animate-pulse shrink-0">touch_app</span>
-      <span class="truncate">Hacé clic en el mapa para fijar el punto geográfico exacto</span>
-    </div>
-
     <!-- Filtros de Capas Flotantes Inferiores -->
-    <div class="absolute bottom-2 left-2 z-10 flex flex-wrap gap-1.5 bg-[#070e1a]/90 backdrop-blur-md border border-[#3d494c]/50 rounded-lg p-1.5 text-[10px] font-mono shadow-lg">
+    <div class="absolute bottom-2 left-2 z-10 flex flex-wrap items-center gap-1.5 bg-[#070e1a]/90 backdrop-blur-md border border-[#3d494c]/50 rounded-lg p-1.5 text-[10px] font-mono shadow-lg max-w-[calc(100%-1rem)]">
       <!-- Toggle Incidentes -->
       <button
         type="button"
@@ -638,6 +644,15 @@ watch(
         <span class="w-2 h-2 rounded-full bg-[#ffb3ad]"></span>
         <span>Incidentes ({{ incidents.length }})</span>
       </button>
+
+      <!-- Indicador de modo selector (al lado de Incidentes) -->
+      <div
+        v-if="pickerMode"
+        class="flex items-center gap-1.5 bg-[#06b6d4]/15 border border-[#4cd7f6]/50 text-[#4cd7f6] px-2 py-1 rounded font-medium"
+      >
+        <span class="material-symbols-outlined text-[13px] animate-pulse">touch_app</span>
+        <span>Hacé clic en el mapa para fijar el punto geográfico exacto</span>
+      </div>
 
       <!-- Toggle Puntos de Notificación (Reportes Ciudadanos) -->
       <button

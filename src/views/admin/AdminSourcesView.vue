@@ -5,6 +5,7 @@ import { createSource, listSources, updateSource } from '@/services/monitoring.s
 import { pushToast } from '@/composables/useToast';
 import { toUserMessage } from '@/types/states';
 import { LABELS, formatDateTime } from '@/config/labels';
+import { syncAllOfficialSources } from '@/services/externalSources.service';
 import type { InfoSource, SourceType } from '@/types/domain';
 import StateMessage from '@/components/ui/StateMessage.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
@@ -14,6 +15,24 @@ const sourcesQuery = useAsyncData<InfoSource[]>(() => listSources(), { isEmpty: 
 
 const busy = ref(false);
 const errorMsg = ref('');
+const syncingOfficial = ref(false);
+
+async function handleSyncOfficial(): Promise<void> {
+  syncingOfficial.value = true;
+  try {
+    const report = await syncAllOfficialSources();
+    pushToast(
+      'success',
+      'Sincronización oficial exitosa',
+      `SMN (${report.smn.observations.length} est.), INA (${report.ina.ports.length} puertos), NASA FIRMS (${report.firms.totalActiveSpots} focos).`,
+    );
+    await sourcesQuery.reload();
+  } catch (err: any) {
+    pushToast('error', 'Error en sincronización', err.message);
+  } finally {
+    syncingOfficial.value = false;
+  }
+}
 
 const creating = ref(false);
 const createForm = reactive({
@@ -110,13 +129,26 @@ const statusTone = (s: string): 'success' | 'warning' | 'critical' | 'neutral' =
           "conectada" cuando exista un adaptador funcionando y sincronizando. No se almacenan secretos acá.
         </p>
       </div>
-      <button
-        type="button"
-        class="flex items-center gap-1.5 bg-[#06b6d4] hover:bg-[#4cd7f6] text-[#00424f] px-3 py-1.5 rounded text-xs font-semibold shrink-0"
-        @click="creating = true"
-      >
-        <span class="material-symbols-outlined text-[16px]">add_circle</span> Nueva fuente
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          :disabled="syncingOfficial"
+          class="flex items-center gap-1.5 bg-[#141c28] hover:bg-[#232a37] text-[#4cd7f6] border border-[#4cd7f6]/40 px-3 py-1.5 rounded text-xs font-semibold shrink-0 transition-colors"
+          @click="handleSyncOfficial"
+        >
+          <span class="material-symbols-outlined text-[15px]" :class="{ 'animate-spin': syncingOfficial }">
+            {{ syncingOfficial ? 'refresh' : 'sync' }}
+          </span>
+          <span>{{ syncingOfficial ? 'Sincronizando...' : 'Sincronizar oficiales (SMN, INA, FIRMS)' }}</span>
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 bg-[#06b6d4] hover:bg-[#4cd7f6] text-[#00424f] px-3 py-1.5 rounded text-xs font-semibold shrink-0"
+          @click="creating = true"
+        >
+          <span class="material-symbols-outlined text-[16px]">add_circle</span> Nueva fuente
+        </button>
+      </div>
     </div>
 
     <StateMessage :state="sourcesQuery.state.value" @retry="sourcesQuery.reload()">
