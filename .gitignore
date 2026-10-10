@@ -6,4 +6,12 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Script de seed con credenciales de administración: NUNCA versionar (evita filtración de keys).
+seed.mjs
 scripts/seed.mjs
+
+# Claves de cuenta de servicio (Admin SDK): jamás versionar.
+*-firebase-adminsdk-*.json
+*.service-account.json
+serviceAccount*.json

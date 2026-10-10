@@ -68,8 +68,8 @@ let stationsLayer: VectorLayer<VectorSource> | null = null;
 let sensorsLayer: VectorLayer<VectorSource> | null = null;
 let pickerLayer: VectorLayer<VectorSource> | null = null;
 
-// Tipo de mapa base
-const baseLayerType = ref<'dark' | 'satellite' | 'streets'>('dark');
+// Tipo de mapa base (Satélite y Calles)
+const baseLayerType = ref<'satellite' | 'streets'>('satellite');
 
 // Filtros de visibilidad
 const showIncidents = ref(true);
@@ -84,7 +84,6 @@ const activePopup = ref<{
 } | null>(null);
 
 const tileUrls = {
-  dark: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
   satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   streets: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
 };
@@ -165,7 +164,7 @@ function createPickerSvg(): string {
 
 // ─── Funciones del Mapa ─────────────────────────────────────────────────────
 
-function switchBaseLayer(type: 'dark' | 'satellite' | 'streets') {
+function switchBaseLayer(type: 'satellite' | 'streets') {
   baseLayerType.value = type;
   if (!baseTileLayer) return;
   baseTileLayer.setSource(
@@ -578,19 +577,11 @@ watch(
 
     <!-- Barra de Control Superior: Capas y Vista -->
     <div class="absolute top-2 right-2 z-10 flex flex-wrap items-center gap-1.5 bg-[#070e1a]/90 backdrop-blur-md border border-[#3d494c]/50 rounded-lg p-1.5 shadow-lg">
-      <!-- Selector de Tipo de Capa Base -->
+      <!-- Selector de Tipo de Capa Base (Satélite y Calles) -->
       <div class="flex items-center bg-[#141c28] rounded border border-[#3d494c]/30 p-0.5 text-[10px] font-mono">
         <button
           type="button"
-          :class="['px-2 py-1 rounded transition-colors', baseLayerType === 'dark' ? 'bg-[#06b6d4] text-[#00424f] font-bold' : 'text-[#869397] hover:text-[#dbe3f4]']"
-          title="Vista Cartográfica Táctica Oscura"
-          @click="switchBaseLayer('dark')"
-        >
-          Táctico
-        </button>
-        <button
-          type="button"
-          :class="['px-2 py-1 rounded transition-colors', baseLayerType === 'satellite' ? 'bg-[#06b6d4] text-[#00424f] font-bold' : 'text-[#869397] hover:text-[#dbe3f4]']"
+          :class="['px-2.5 py-1 rounded transition-colors', baseLayerType === 'satellite' ? 'bg-[#06b6d4] text-[#00424f] font-bold' : 'text-[#869397] hover:text-[#dbe3f4]']"
           title="Vista Satelital Real de Alta Resolución (Esri)"
           @click="switchBaseLayer('satellite')"
         >
@@ -598,8 +589,8 @@ watch(
         </button>
         <button
           type="button"
-          :class="['px-2 py-1 rounded transition-colors', baseLayerType === 'streets' ? 'bg-[#06b6d4] text-[#00424f] font-bold' : 'text-[#869397] hover:text-[#dbe3f4]']"
-          title="Vista Cartográfica Estándar (OSM)"
+          :class="['px-2.5 py-1 rounded transition-colors', baseLayerType === 'streets' ? 'bg-[#06b6d4] text-[#00424f] font-bold' : 'text-[#869397] hover:text-[#dbe3f4]']"
+          title="Vista Cartográfica de Calles y Rutas (OSM)"
           @click="switchBaseLayer('streets')"
         >
           Calles
@@ -627,10 +618,13 @@ watch(
       </button>
     </div>
 
-    <!-- Indicador de modo selector -->
-    <div v-if="pickerMode" class="absolute top-2 left-12 z-10 bg-[#070e1a]/90 backdrop-blur-md border border-[#4cd7f6]/50 rounded-lg px-2.5 py-1 text-xs text-[#4cd7f6] font-mono flex items-center gap-1.5 shadow-lg">
-      <span class="material-symbols-outlined text-[16px] animate-pulse">touch_app</span>
-      <span>Hacé clic en el mapa para fijar el punto geográfico exacto</span>
+    <!-- Indicador de modo selector (posicionado de forma no obstructiva centrado y debajo de los controles) -->
+    <div
+      v-if="pickerMode"
+      class="absolute top-14 left-1/2 -translate-x-1/2 z-10 pointer-events-none max-w-[calc(100%-1rem)] bg-[#070e1a]/95 backdrop-blur-md border border-[#4cd7f6]/60 rounded-full px-3.5 py-1 text-xs text-[#4cd7f6] font-mono flex items-center justify-center gap-2 shadow-2xl"
+    >
+      <span class="material-symbols-outlined text-[15px] animate-pulse shrink-0">touch_app</span>
+      <span class="truncate">Hacé clic en el mapa para fijar el punto geográfico exacto</span>
     </div>
 
     <!-- Filtros de Capas Flotantes Inferiores -->
