@@ -12,6 +12,7 @@ import { fromLonLat, toLonLat } from 'ol/proj.js';
 import Overlay from 'ol/Overlay.js';
 import { Style, Icon } from 'ol/style.js';
 import type { Incident, CitizenReport, Sensor, HydroStation } from '@/types/domain';
+import type { ThermalHotspot } from '@/integrations/nasaFirms.adapter';
 import { LABELS, formatTimeAgo } from '@/config/labels';
 
 const props = withDefaults(
@@ -19,6 +20,7 @@ const props = withDefaults(
     incidents?: Incident[];
     reports?: CitizenReport[];
     stations?: Array<HydroStation & { state?: string }>;
+    hotspots?: ThermalHotspot[];
     sensors?: Sensor[];
     mode?: 'publico' | 'tecnico';
     heightClass?: string;
@@ -31,6 +33,7 @@ const props = withDefaults(
     incidents: () => [],
     reports: () => [],
     stations: () => [],
+    hotspots: () => [],
     sensors: () => [],
     mode: 'publico',
     heightClass: 'h-[480px]',
@@ -59,12 +62,14 @@ let popupOverlay: Overlay | null = null;
 const incidentsSource = new VectorSource();
 const reportsSource = new VectorSource();
 const stationsSource = new VectorSource();
+const hotspotsSource = new VectorSource();
 const sensorsSource = new VectorSource();
 const pickerSource = new VectorSource();
 
 let incidentsLayer: VectorLayer<VectorSource> | null = null;
 let reportsLayer: VectorLayer<VectorSource> | null = null;
 let stationsLayer: VectorLayer<VectorSource> | null = null;
+let hotspotsLayer: VectorLayer<VectorSource> | null = null;
 let sensorsLayer: VectorLayer<VectorSource> | null = null;
 let pickerLayer: VectorLayer<VectorSource> | null = null;
 
@@ -75,12 +80,14 @@ const baseLayerType = ref<'satellite' | 'streets'>('satellite');
 const showIncidents = ref(true);
 const showReports = ref(true);
 const showStations = ref(true);
+const showHotspots = ref(true);
 const showSensors = ref(props.mode === 'tecnico');
 
 type PopupState =
   | { type: 'incident'; data: Incident }
   | { type: 'report'; data: CitizenReport }
   | { type: 'station'; data: HydroStation & { state?: string } }
+  | { type: 'hotspot'; data: ThermalHotspot }
   | { type: 'sensor'; data: Sensor };
 
 // Estado del popup reactivo
@@ -151,6 +158,16 @@ function createStationSvg(code: string, levelM: number, isAlert: boolean): strin
       <rect x="1" y="2" width="84" height="20" rx="4" fill="${bg}" stroke="${border}" stroke-width="1.5"/>
       <circle cx="9" cy="12" r="3.5" fill="${border}"/>
       <text x="16" y="15" fill="${text}" font-size="9" font-family="monospace" font-weight="bold">${code}: ${levelM.toFixed(2)}m</text>
+    </svg>
+  `);
+}
+
+function createHotspotSvg(frpMw: number, isSelected: boolean): string {
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="68" height="24" viewBox="0 0 68 24">
+      <rect x="1" y="2" width="66" height="20" rx="4" fill="#93000a" stroke="${isSelected ? '#ffffff' : '#ffb4ab'}" stroke-width="${isSelected ? '2.5' : '1.5'}"/>
+      <circle cx="9" cy="12" r="3.5" fill="#ffb4ab"/>
+      <text x="16" y="15" fill="#ffdad6" font-size="8" font-family="monospace" font-weight="bold">🛰️ ${frpMw}MW</text>
     </svg>
   `);
 }
@@ -359,6 +376,30 @@ function updateFeatures() {
       sensorsSource.addFeature(feature);
     });
   }
+
+  // 5. Focos satelitales NASA FIRMS
+  hotspotsSource.clear();
+  if (showHotspots.value && props.hotspots && props.hotspots.length > 0) {
+    props.hotspots.forEach((h) => {
+      if (typeof h.lat !== 'number' || typeof h.lng !== 'number') return;
+      const feature = new Feature({
+        geometry: new Point(fromLonLat([h.lng, h.lat])),
+        itemType: 'hotspot',
+        itemData: h,
+      });
+
+      feature.setStyle(
+        new Style({
+          image: new Icon({
+            src: createHotspotSvg(h.frpMw, false),
+            anchor: [0.5, 0.5],
+          }),
+        }),
+      );
+
+      hotspotsSource.addFeature(feature);
+    });
+  }
 }
 
 onMounted(() => {
@@ -376,6 +417,7 @@ onMounted(() => {
   incidentsLayer = new VectorLayer({ source: incidentsSource });
   reportsLayer = new VectorLayer({ source: reportsSource });
   stationsLayer = new VectorLayer({ source: stationsSource });
+  hotspotsLayer = new VectorLayer({ source: hotspotsSource });
   sensorsLayer = new VectorLayer({ source: sensorsSource });
   pickerLayer = new VectorLayer({ source: pickerSource, zIndex: 100 });
 
@@ -399,6 +441,7 @@ onMounted(() => {
       incidentsLayer,
       reportsLayer,
       stationsLayer,
+      hotspotsLayer,
       sensorsLayer,
       pickerLayer,
     ],
@@ -437,6 +480,9 @@ onMounted(() => {
         activePopup.value = { type: 'station', data: itemData };
         popupOverlay?.setPosition(evt.coordinate);
         emit('select-station', itemData.id);
+      } else if (itemType === 'hotspot') {
+        activePopup.value = { type: 'hotspot', data: itemData };
+        popupOverlay?.setPosition(evt.coordinate);
       } else if (itemType === 'sensor') {
         activePopup.value = { type: 'sensor', data: itemData };
         popupOverlay?.setPosition(evt.coordinate);
@@ -477,7 +523,7 @@ onUnmounted(() => {
 
 // Observadores de cambios reactivos
 watch(
-  () => [props.incidents, props.reports, props.stations, props.sensors, props.selectedId],
+  () => [props.incidents, props.reports, props.stations, props.hotspots, props.sensors, props.selectedId],
   () => {
     updateFeatures();
   },
@@ -485,7 +531,7 @@ watch(
 );
 
 watch(
-  () => [showIncidents.value, showReports.value, showStations.value, showSensors.value],
+  () => [showIncidents.value, showReports.value, showStations.value, showHotspots.value, showSensors.value],
   () => {
     updateFeatures();
   },
@@ -578,6 +624,23 @@ watch(
           <div>Cota Evacuación: {{ activePopup.data.evacLevelM.toFixed(2) }} m</div>
           <div>Tendencia: {{ activePopup.data.trendCmPerHour !== null ? `+${activePopup.data.trendCmPerHour} cm/h` : 'Estable' }}</div>
           <div>Actualizado: {{ formatTimeAgo(activePopup.data.updatedAt) }}</div>
+        </div>
+      </div>
+
+      <!-- Detalle de Foco Satelital NASA FIRMS -->
+      <div v-else-if="activePopup?.type === 'hotspot'" class="space-y-1.5 text-xs">
+        <div class="flex items-center justify-between gap-2 border-b border-[#3d494c]/40 pb-1">
+          <span class="font-mono font-bold text-[#ffb4ab]">🛰️ NASA FIRMS · {{ activePopup.data.satellite }}</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono bg-[#93000a] text-[#ffdad6]">
+            Confianza {{ activePopup.data.confidence }}
+          </span>
+        </div>
+        <div class="font-bold text-[#dbe3f4]">Anomalía térmica satelital activa</div>
+        <div class="text-[10px] text-[#bcc9cd] font-mono space-y-0.5">
+          <div>📍 Zona: {{ activePopup.data.zone }}</div>
+          <div>🔥 Potencia radiativa (FRP): {{ activePopup.data.frpMw }} MW</div>
+          <div>🌡️ Temperatura de brillo: {{ activePopup.data.brightnessK }} K</div>
+          <div>🕒 Pasada satelital: {{ formatTimeAgo(activePopup.data.detectedAt) }}</div>
         </div>
       </div>
 
@@ -674,6 +737,17 @@ watch(
       >
         <span class="w-2 h-2 rounded-full bg-[#4cd7f6]"></span>
         <span>Ríos / Estaciones ({{ stations.length }})</span>
+      </button>
+
+      <!-- Toggle Focos Satelitales (NASA FIRMS) -->
+      <button
+        v-if="hotspots.length > 0"
+        type="button"
+        :class="['flex items-center gap-1 px-2 py-1 rounded transition-colors border', showHotspots ? 'bg-[#93000a]/30 border-[#ffb4ab] text-[#ffdad6]' : 'bg-[#141c28] border-transparent text-[#869397]']"
+        @click="showHotspots = !showHotspots"
+      >
+        <span class="w-2 h-2 rounded-full bg-[#ffb4ab]"></span>
+        <span>Focos Satelitales NASA ({{ hotspots.length }})</span>
       </button>
 
       <!-- Toggle Sensores (Modo técnico) -->

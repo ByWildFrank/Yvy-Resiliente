@@ -4,6 +4,7 @@ import { useAsyncData } from '@/composables/useAsyncData';
 import { listIncidents } from '@/services/incidents.service';
 import { listReportsForAgents } from '@/services/reports.service';
 import { listStations, listSensors } from '@/services/monitoring.service';
+import { fetchNasaFirmsHotspots, type ThermalHotspot } from '@/integrations/nasaFirms.adapter';
 import { can } from '@/services/auth.service';
 import { LABELS, formatTimeAgo } from '@/config/labels';
 import StateMessage from '@/components/ui/StateMessage.vue';
@@ -18,6 +19,7 @@ const reportsQuery = can('reports:read')
   : null;
 const stationsQuery = useAsyncData<StationReadout[]>(() => listStations());
 const sensorsQuery = useAsyncData<Sensor[]>(() => listSensors(), { isEmpty: () => false });
+const hotspotsQuery = useAsyncData<ThermalHotspot[]>(() => fetchNasaFirmsHotspots().then(r => r.hotspots), { isEmpty: () => false });
 
 const selectedId = ref<string | null>(null);
 const selectedType = ref<'incident' | 'report' | null>(null);
@@ -64,6 +66,7 @@ function onSelectReport(id: string): void {
               :incidents="incidentsQuery.state.value.status === 'ok' ? incidentsQuery.state.value.data : []"
               :reports="reportsQuery && reportsQuery.state.value.status === 'ok' ? reportsQuery.state.value.data : []"
               :stations="stationsQuery.state.value.status === 'ok' ? stationsQuery.state.value.data : []"
+              :hotspots="hotspotsQuery.state.value.status === 'ok' ? hotspotsQuery.state.value.data : []"
               :sensors="sensorsQuery.state.value.status === 'ok' ? sensorsQuery.state.value.data : []"
               mode="tecnico"
               height-class="h-[600px]"
