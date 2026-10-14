@@ -106,7 +106,7 @@ A continuación se detalla el contenido exacto de cada tarjeta para organizar ma
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                     BUSINESS MODEL CANVAS — YVY                                       │
+│                                     BUSINESS MODEL CANVAS — YVY                                        │
 ├───────────────────┬───────────────────┬───────────────────┬───────────────────┬────────────────────────┤
 │ 8. SOCIOS CLAVE   │ 7. ACTIVIDADES    │ 2. PROPUESTA      │ 4. RELACIONES     │ 1. SEGMENTO DE         │
 │                   │    CLAVE          │    DE VALOR       │    CON CLIENTES   │    CLIENTES            │
