@@ -36,6 +36,7 @@ async function handleSyncOfficial(): Promise<void> {
 
 const creating = ref(false);
 const createForm = reactive({
+  code: '',
   name: '',
   provider: '',
   type: 'meteorologica' as SourceType,
@@ -46,6 +47,21 @@ const createForm = reactive({
   notes: '',
   requiresEnv: '',
 });
+
+function openCreate(): void {
+  createForm.code = '';
+  createForm.name = '';
+  createForm.provider = '';
+  createForm.type = 'meteorologica';
+  createForm.status = 'pendiente';
+  createForm.coverage = '';
+  createForm.variables = '';
+  createForm.units = '';
+  createForm.notes = '';
+  createForm.requiresEnv = '';
+  errorMsg.value = '';
+  creating.value = true;
+}
 
 const editing = ref<InfoSource | null>(null);
 const editForm = reactive({
@@ -72,6 +88,7 @@ async function submitCreate(): Promise<void> {
   errorMsg.value = '';
   try {
     const source = await createSource({
+      code: createForm.code.trim().toUpperCase(),
       name: createForm.name.trim(),
       provider: createForm.provider.trim(),
       type: createForm.type,
@@ -144,7 +161,7 @@ const statusTone = (s: string): 'success' | 'warning' | 'critical' | 'neutral' =
         <button
           type="button"
           class="flex items-center gap-1.5 bg-[#06b6d4] hover:bg-[#4cd7f6] text-[#00424f] px-3 py-1.5 rounded text-xs font-semibold shrink-0"
-          @click="creating = true"
+          @click="openCreate"
         >
           <span class="material-symbols-outlined text-[16px]">add_circle</span> Nueva fuente
         </button>
@@ -188,6 +205,10 @@ const statusTone = (s: string): 'success' | 'warning' | 'critical' | 'neutral' =
     <ModalDialog :open="creating" title="Nueva fuente" wide @close="creating = false">
       <form class="space-y-3" @submit.prevent="submitCreate">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-mono text-[#869397] uppercase mb-1" for="s-code">Código</label>
+            <input id="s-code" v-model="createForm.code" type="text" required placeholder="SRC-OPENMETEO" class="w-full bg-[#18202c] border border-[#3d494c]/40 rounded px-2.5 py-2 text-sm text-[#dbe3f4]" />
+          </div>
           <div>
             <label class="block text-[11px] font-mono text-[#869397] uppercase mb-1" for="s-name">Nombre</label>
             <input id="s-name" v-model="createForm.name" type="text" required class="w-full bg-[#18202c] border border-[#3d494c]/40 rounded px-2.5 py-2 text-sm text-[#dbe3f4]" />
